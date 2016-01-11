@@ -1,5 +1,5 @@
 
-// Neopixel Salt Lamp v1.2
+// Neopixel Salt Lamp v1.3
 // By Chris Barrett - Polaris Interplanetary - Special Projects Division
 // Supports two modes; All pixel colour fade, and 8 pixel RGB mixer. All modes are asynchronous, and compartmentalized into functions.
 // January 2016 - Shimmer has been overhauled. Cleaner, faster and more productive. NO MORE MID FADE FLICKER! 

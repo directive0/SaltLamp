@@ -3,7 +3,7 @@
 // By Chris Barrett - Polaris Interplanetary - Special Projects Division
 // Supports two modes; All pixel colour fade, and 8 pixel RGB mixer. All modes are asynchronous, and compartmentalized into functions.
 // January 2016 - Shimmer has been overhauled. Cleaner, faster and more productive. NO MORE MID FADE FLICKER! 
-//              - Still needs collision detection.
+//              - Collision detection has been implemented, not sure if it works, will need to check further.
 
 #include <Adafruit_NeoPixel.h>
 #include <avr/power.h>
@@ -14,7 +14,7 @@
 
 // what address are the pixels going to range? This was helpful in prototyping because I could use a long strip of lights and only address the last few and stick them in the salt crystal.
 #define NUMPIXELS      133
-#define LOWPIXELS      83
+#define LOWPIXELS      90 
 
 
 
@@ -57,6 +57,7 @@ int pixbrt[8];                                      // array to store the pixel 
 int pixpos;                                         // array to store the pixel brightness for each possible pixel
 int firstrun = 0;                                   //array to write first run values to pixels
 int shimspd[8];                                    //array to set random speed value for shimmer
+int pixchck[8];
 
 void setup() {                                      //-----------------------------------------------(Setup)
     pinMode(butpin, INPUT);                         // Set buttonpin as input
@@ -88,13 +89,13 @@ void loop() {                                       //--------------------------
       shimmer();
   }
   
-  //Serial.println(pixupdn[1]);
+ 
   pixels.show();                                  // This sends the updated pixel color to the hardware.
 
   
   
 
-  delay(40);
+  delay(30);
   
 }
 
@@ -231,6 +232,28 @@ void shimmer() {                                    //--------------------------
             pixcoldic[i] = random(0,9);             //Creates a magic number 
             pixelgo[i] = 1;                         //Activates a pixel for draw
             shimspd[i] = random(1,5);
+
+            while (pixchck[i] == 0){                //collision detection
+              pixmat[i] == 0;
+              randomSeed(analogRead(0));
+              pixelvalue[i] = random(LOWPIXELS,NUMPIXELS);
+              //Serial.println("repositioning");
+              //Serial.println(i);
+               
+              for (int b=0; b <= 7; b++){                      //For loop to write initial random position
+                if (pixelvalue[i] == pixelvalue[b]){
+                  pixmat[i] = pixmat[i] + 1;
+                }
+
+                if (pixmat[i] <= 1){
+                  pixchck[i] = 1;
+                }
+              }
+
+              
+            }
+
+        
         }
     } 
     
@@ -252,7 +275,7 @@ void shimmer() {                                    //--------------------------
                                      
 }
 
-void drawPixel(int pixelv,int coldic, int rate){              //-----------------------------------------------(Red Pixel Draw Function)
+void drawPixel(int pixelv,int coldic, int rate){              //-----------------------------------------------(Pixel Draw Function)
 
 
 
@@ -287,6 +310,7 @@ void drawPixel(int pixelv,int coldic, int rate){              //----------------
         pixelvalue[pixelv] = random(LOWPIXELS,NUMPIXELS);                 //create new random pixel location
         pixelgo[pixelv] = 0;                                              //deactivate pixel activate bit
         pixupdn[pixelv] = 0;                                              //reset counter
+        pixchck[pixelv] = 0;
       }
   
 }

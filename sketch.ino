@@ -1,20 +1,27 @@
-
-// Neopixel Salt Lamp v1.3
+  
+// Neopixel Salt Lamp v2.0
 // By Chris Barrett - Polaris Interplanetary - Special Projects Division
 // Supports two modes; All pixel colour fade, and 8 pixel RGB mixer. All modes are asynchronous, and compartmentalized into functions.
-// January 2016 - Shimmer has been overhauled. Cleaner, faster and more productive. NO MORE MID FADE FLICKER! 
-//              - Collision detection has been implemented, not sure if it works, will need to check further.
 
-#include <Adafruit_NeoPixel.h>
-#include <avr/power.h>
-#include <Encoder.h>
+//  January 2017  - began to implement relative intervals to control the rate of colours firing and ensure better spacing and pacing.
+//  Dec  2016     - Changed shimmer to use a different array based system to try and finally end flickering.
+//  June 2016     - Re-implemented rotary encoder functions for brightness control
+//                - New timing function to space out updates
+//                - LIGHTNING FUNCTION 
+//                - produces a quicker shimmer effect, may replace shimmer with it later.
+//  January 2016  - Shimmer has been overhauled. Cleaner, faster and more productive. NO MORE MID FADE FLICKER?
+//                - Collision detection has been implemented, not sure if it works, will need to check further.
 
-// Which pin on the Arduino is connected to the NeoPixels?
-#define PIN            6
+#include <Adafruit_NeoPixel.h>  //  Neopixel library
+//#include <avr/power.h>        //  Not sure why this is here, lol
+#include <Encoder.h>            //  Rotary encoder library.
 
-// what address are the pixels going to range? This was helpful in prototyping because I could use a long strip of lights and only address the last few and stick them in the salt crystal.
-#define NUMPIXELS      133
-#define LOWPIXELS      90 
+
+#define PIN            6        //  Which pin on the Arduino is connected to the NeoPixels
+
+
+#define NUMPIXELS      37      //  Highest pixel location. 
+#define LOWPIXELS      0       //  Lowest pixel location This was helpful in prototyping because I could use a long strip of lights and only address the last few and stick them in the salt crystal.
 
 
 
@@ -23,79 +30,103 @@
 // example for more information on possible values.
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
-Encoder myEnc(2, 3);
-int butpin = 5;                                     // integer to store button pin
-int butval;                                         // Button digital read variable
-int butsel = 2;                                     // Button mode selection variable.
-int butbounce;                                      // button debounce
-int rcount;                                         // Counter for red
-int gcount;                                         // Counter for green
-int bcount;                                         // Counter for blue
-int rval;                                           // int stores red brightness
-int gval;                                           // int stores green brightness
-int bval;                                           // int stores blue brightness
-int rgo;                                            // red go int, 0 for off, 1 for upwards, 2 for downwards
-int ggo;                                            // green go int, 0 for off, 1 for upwards, 2 for downwards
-int bgo;                                            // blue go int, 0 for off, 1 for upwards, 2 for downwards
-int magicnumber;                                    // magic number determines when to fire colours
+Encoder myEnc(2, 3);                                //  Encoder function variables
+
+//--------------------------------------------------//  TIMER STUFF
 
 
-//--------------------------------------------------// The following values are for the "Shimmer" routine
-int pixelvalue[8];                                  // array to store the address location of each pixel event, 8 in total
-int pixelgo[8];                                     // array to store the activation bit for each pixel event, 8 in total
-int pixmax = 512;                                   // int to store the max animation keyframe for each pixel event
-int pixelcol[8];                                    // array to store the colour decision
-int pixcoldic[8];                                   // array to store the colour decision bit
-int pixmat[8];                                      // array to indicate whether a pixel is stepping on another pixel
-int delayval;                                       // integer to hold delay value
-int randosparkle =0;                                // integer to hold the random number value
-int randosparklenum[] = {1,30,54,43,2,100,150,97};  // integer to hold the magic numbers governing which pixel fires next
-int maxbright;                                      // integer to determine max bright
-long oldPosition  = 255;                            // integer to store encoder value
-int pixupdn[8];                                     // array to store the pixel ascent/descent for each possible pixel
-int pixbrt[8];                                      // array to store the pixel brightness for each possible pixel
-int pixpos;                                         // array to store the pixel brightness for each possible pixel
-int firstrun = 0;                                   //array to write first run values to pixels
-int shimspd[8];                                    //array to set random speed value for shimmer
-int pixchck[8];
+/* These are from Blink without Delay 
+Shows another way to execute delays. */
+unsigned long previousMillis = 0;
+unsigned long lastbolt = 0;
+unsigned long interval[30];
+int maxb;
+
+
+int butpin = 5;                                     //  integer to store button pin
+int butval;                                         //  Button digital read variable
+int butsel = 1;                                     //  Button mode selection variable.
+int butbounce;                                      //  button debounce
+int rcount;                                         //  Counter for red
+int gcount;                                         //  Counter for green
+int bcount;                                         //  Counter for blue
+int rval;                                           //  int stores red brightness
+int gval;                                           //  int stores green brightness
+int bval;                                           //  int stores blue brightness
+int rgo;                                            //  red go int, 0 for off, 1 for upwards, 2 for downwards
+int ggo;                                            //  green go int, 0 for off, 1 for upwards, 2 for downwards
+int bgo;                                            //  blue go int, 0 for off, 1 for upwards, 2 for downwards
+int magicnumber;                                    //  magic number determines when to fire colours
+int supbright;
+int interntimer;
+
+//--------------------------------------------------//  The following values are for the "Shimmer" routine
+int PixRay[NUMPIXELS][7];
+long oldPosition  = 255;                            //  integer to store encoder value
+int firstrun = 0;                                   //  array to write first run values to pixels
+int randosparkle =0;                                //  integer to hold the random number value
+
+//--------------------------------------------------// LIGHTNING
+int boltgo[8];
+int boltloc[8];
+int boltbright[8];
+int boltupdn[8];
+int boltready[8];
 
 void setup() {                                      //-----------------------------------------------(Setup)
-    pinMode(butpin, INPUT);                         // Set buttonpin as input
-    Serial.begin(9600);                             // Initialize Serial Debug
-    pixels.begin();                                 // This initializes the NeoPixel library.
+    pinMode(butpin, INPUT);                         //  Set buttonpin as input
+ //   Serial.begin(9600);                           //  Initialize Serial Debug
+   pixels.begin();                                  //  This initializes the NeoPixel library.
 
-
+    for (int i=0; i <= (NUMPIXELS-1); i++){             //  set magic number for all pixray locations
+      PixRay[i][5] = {i};
+    }
 
 }
 
 void loop() {                                       //-----------------------------------------------(Main Loop)
 
   if (firstrun == 0){
-    for (int i=0; i <= 7; i++){                      //For loop to write initial random position
-        pixelvalue[i] = random(LOWPIXELS,NUMPIXELS);
-        firstrun = 1;
-        }
-    
   }
+  
   butcheck();
 
-  if (butsel == 1){
-      clearscreen();
-      colourfade();
-  }
-  
-  if (butsel == 2){
-      clearscreen();
-      shimmer();
-  }
-  
- 
-  pixels.show();                                  // This sends the updated pixel color to the hardware.
+unsigned int tnow = millis();
 
-  
-  
-
-  delay(30);
+   // some other logic here would decide when to change the LED state
+   // For this sample, just toggle every 4 seconds
+  if((tnow - previousMillis) >= interval[0]) {        
+      
+      if (oldPosition > 1 && oldPosition < 255){
+        supbright = oldPosition;
+      }
+    
+      if (oldPosition < 0){
+        supbright = 0;
+      }
+    
+      if (oldPosition > 255){
+        supbright = 255;
+      }
+      
+      
+      if (butsel == 1){
+          clearscreen();
+          shimmer();
+      }
+      
+      if (butsel == 2){
+          clearscreen();
+          colourfade();
+      }
+    
+      if (butsel == 3){
+          clearscreen();
+      }
+    
+      pixels.show();                                  // This sends the updated pixel color to the hardware.
+    previousMillis = tnow;
+}
   
 }
 
@@ -106,8 +137,30 @@ void clearscreen(){                                 //--------------------------
 }
 
 void butcheck(){                                    //-----------------------------------------------(Button Check Function)
+  
+
+    
+    long newPosition = myEnc.read();
+    if (newPosition != oldPosition) {
+
+
+    if (newPosition >= 100){
+      myEnc.write(100);
+    }
+    if (newPosition < 0){
+      myEnc.write(0);
+    }
+        oldPosition = newPosition;
+       // Serial.println(newPosition);
+    }
+
+    interval[0] = map(newPosition, 0, 100, 80, 0);
+    maxb = map(newPosition, 0, 100, 0, 255);
+    
     pinMode(butpin, INPUT);
     butval = digitalRead(butpin);                   // check button pin for a high
+
+
     
     if (butval == HIGH){                            // if high signal read add one to the button selection variable
       butbounce = 1;
@@ -125,18 +178,6 @@ void butcheck(){                                    //--------------------------
 
 void colourfade(){                                  //-----------------------------------------------(Colour Fade Function)
 
-    long newPosition = myEnc.read();
-    if (newPosition != oldPosition) {
-        oldPosition = newPosition;
-        Serial.println(newPosition);
-    }
-    if (newPosition > 255){
-      myEnc.write(1);
-    }
-    if (newPosition < 1){
-      myEnc.write(255);
-    }
-    
     magicnumber = random(0,30);                     //creates a magic number
 
     if (magicnumber == 3 && rgo == 0){              //checks to see if magic number has selected red and red is not currently firing
@@ -162,7 +203,7 @@ void colourfade(){                                  //--------------------------
       rval = rval - 1;
     }
     
-    if (rval >= 255){                               // sets red bit to 2 meaning negative alternation
+    if (rval >= maxb){                               // sets red bit to 2 meaning negative alternation
       rgo = 2;
     }
     
@@ -181,7 +222,7 @@ void colourfade(){                                  //--------------------------
       bval = bval - 1;
     }
     
-    if (bval >= 255){
+    if (bval >= maxb){
       bgo = 2;
     }
     
@@ -200,7 +241,7 @@ void colourfade(){                                  //--------------------------
       gval = gval - 1;
     }
     
-    if (gval >= 255){
+    if (gval >= maxb){
       ggo = 2;
     }
     
@@ -221,96 +262,66 @@ void colourfade(){                                  //--------------------------
 
 void shimmer() {                                    //-----------------------------------------------(Shimmer Function)
 
-    pixels.setBrightness(oldPosition); 
     
-    randosparkle = random(0,150);                   //creates a magic number
-    
+     randosparkle = random(0,(NUMPIXELS*10));                   //picks a random number
+      
+
                                                     
-    for (int i=0; i <= 7; i++){                     //For loop to check random number against magic number 
-        
-        if (randosparkle == randosparklenum[i] && pixelgo[i] == 0){
-            pixcoldic[i] = random(0,9);             //Creates a magic number 
-            pixelgo[i] = 1;                         //Activates a pixel for draw
-            shimspd[i] = random(1,5);
-
-            while (pixchck[i] == 0){                //collision detection
-              pixmat[i] == 0;
-              randomSeed(analogRead(0));
-              pixelvalue[i] = random(LOWPIXELS,NUMPIXELS);
-              //Serial.println("repositioning");
-              //Serial.println(i);
-               
-              for (int b=0; b <= 7; b++){                      //For loop to write initial random position
-                if (pixelvalue[i] == pixelvalue[b]){
-                  pixmat[i] = pixmat[i] + 1;
-                }
-
-                if (pixmat[i] <= 1){
-                  pixchck[i] = 1;
-                }
-              }
-
-              
-            }
-
-        
-        }
+    for (int i=0; i <= (NUMPIXELS-1); i++){                     //For loop to check random number against magic numbers and set the pixel for activation
+      if (PixRay[i][5] == randosparkle && PixRay[i][0] == 0){                       
+        PixRay[i][0] = 1;
+        PixRay[i][1] = random(0,3);
+      }   
     } 
+
+//    unsigned int tnow = millis();
     
-    for (int i=0; i <= 7; i++){                     //For loop to activate a pixel
-        if (pixelgo[i] == 1 && pixcoldic[i] >= 0 && pixcoldic[i] < 3){                       
-            drawPixel(i,2,shimspd[i]);
-            
-        }
-        if (pixelgo[i] == 1 && pixcoldic[i] >= 3 && pixcoldic[i] < 6){                       
-            drawPixel(i,1,shimspd[i]);
-            
-        }
-          if (pixelgo[i] == 1 && pixcoldic[i] >= 6 && pixcoldic[i] < 9){                       
-            drawPixel(i,0,shimspd[i]);
-            
-        }
-        
-}
-                                     
+ //   if((tnow - previousMillis) >= interval[) { 
+      for (int i=0; i <= (NUMPIXELS-1); i++){                     //For loop to activate a pixel
+          if (PixRay[i][0] == 1){                       
+              drawPixel(i);
+          }
+      }
+//      previousMillis = tnow;
+//    }                                
 }
 
-void drawPixel(int pixelv,int coldic, int rate){              //-----------------------------------------------(Pixel Draw Function)
+void drawPixel(int pixelv){              //-----------------------------------------------(Red Pixel Draw Function)
 
 
 
-    if (pixupdn[pixelv] == 0){                      //check if counter is within envelope
-        pixbrt[pixelv] = pixbrt[pixelv] + rate; 
+    if (PixRay[pixelv][4] == 0){                      //check if counter is within envelope
+        PixRay[pixelv][2] = PixRay[pixelv][2] + 1; 
     }
   
-    if (pixupdn[pixelv] == 1){                      //check if counter is within second half of fade    
-      pixbrt[pixelv] = pixbrt[pixelv] - rate;     
+    if (PixRay[pixelv][4] == 1){                      //check if counter is within envelope
+        PixRay[pixelv][2] = PixRay[pixelv][2] - 1; 
     }
 
-    if (pixbrt[pixelv] >= 255){                     //check if counter is within second half of fade    
-      pixupdn[pixelv] = 1;
-      pixbrt[pixelv] = 255;     
+    if (PixRay[pixelv][2] >= maxb){                    //check if counter is within second half of fade    
+      PixRay[pixelv][4] = 1;
+      PixRay[pixelv][2] = maxb;     
     }
 
-    if (coldic == 0){
-      pixels.setPixelColor(pixelvalue[pixelv], pixels.Color(pixbrt[pixelv],0,0));
+    if (PixRay[pixelv][1] == 0){
+      pixels.setPixelColor(pixelv, pixels.Color(PixRay[pixelv][2],0,0));
     }  
 
-    if (coldic == 1){
-      pixels.setPixelColor(pixelvalue[pixelv], pixels.Color(0,pixbrt[pixelv],0));
+    if (PixRay[pixelv][1] == 1){
+      pixels.setPixelColor(pixelv, pixels.Color(0,PixRay[pixelv][2],0));
     }  
 
-    if (coldic == 2){
-      pixels.setPixelColor(pixelvalue[pixelv], pixels.Color(0,0,pixbrt[pixelv]));
+    if (PixRay[pixelv][1] == 2){
+      pixels.setPixelColor(pixelv, pixels.Color(0,0,PixRay[pixelv][2]));
     }     
   
     
-      if (pixbrt[pixelv] <= 0 && pixupdn[pixelv] == 1){                   //check if counter is within second half of fade                                                                          
-        pixels.setPixelColor(pixelvalue[pixelv], pixels.Color(0,0,0));    //turn selected pixel off
-        pixelvalue[pixelv] = random(LOWPIXELS,NUMPIXELS);                 //create new random pixel location
-        pixelgo[pixelv] = 0;                                              //deactivate pixel activate bit
-        pixupdn[pixelv] = 0;                                              //reset counter
-        pixchck[pixelv] = 0;
-      }
+    if (PixRay[pixelv][2] <= 0 && PixRay[pixelv][4] == 1){               //check if counter is done alternation                                                                      
+       pixels.setPixelColor(pixelv, pixels.Color(0,0,0));                //turn selected pixel off
+       PixRay[pixelv][2] = 0;                                            //set brightness to zero
+       PixRay[pixelv][0] = 0;                                            //deactivate pixel activate bit
+       PixRay[pixelv][4] = 0;                                            //reset counter
+    }
   
 }
+
